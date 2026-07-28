@@ -1,21 +1,623 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#050510" />
-    <title>Fugo: Archipelago</title>
-    <script>
-      window.onerror = function(msg, url, line, col, error) {
-        document.body.innerHTML = '<div style="color:red;padding:20px;font-family:monospace;white-space:pre-wrap">ERROR: ' + msg + '\n\n' + (error ? error.stack : '') + '</div>';
-      };
-    </script>
-    <script type="module" crossorigin src="./assets/index-qbI4F4Bb.js?v=2"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-JZ6Pe9pK.css?v=2">
-  </head>
-  <body>
-    <div id="root" style="color:white;padding:20px">Loading...</div>
-  </body>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fugo: Archipelago</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #050510; font-family: system-ui, sans-serif; }
+canvas { display: block; position: absolute; top: 0; left: 0; touch-action: none; }
+#ui { position: absolute; inset: 0; pointer-events: none; }
+.btn { pointer-events: auto; background: rgba(20,20,40,0.9); border: 2px solid rgba(100,120,180,0.4); color: white; padding: 8px 16px; border-radius: 10px; font-size: 14px; cursor: pointer; backdrop-filter: blur(8px); }
+.btn:active { transform: scale(0.95); background: rgba(40,40,80,0.9); }
+#topbar { position: absolute; top: 0; left: 0; right: 0; padding: 10px 15px; background: linear-gradient(180deg, rgba(8,8,18,0.95), rgba(8,8,18,0.7)); backdrop-filter: blur(10px); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: clamp(12px, 3vw, 15px); border-bottom: 1px solid rgba(100,120,180,0.2); }
+#topbar .phase { color: #FCD34D; font-weight: bold; }
+#topbar .res { display: flex; align-items: center; gap: 3px; }
+#topbar .res span { font-weight: 600; font-family: monospace; }
+#buildbar { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 8px; background: rgba(8,8,18,0.95); border-radius: 12px; border: 1px solid rgba(100,120,180,0.3); backdrop-filter: blur(10px); overflow-x: auto; max-width: 95vw; pointer-events: auto; }
+.build-btn { min-width: 70px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; background: rgba(255,255,255,0.04); border: 2px solid rgba(100,120,180,0.2); border-radius: 8px; cursor: pointer; color: white; font-size: clamp(9px, 2vw, 11px); }
+.build-btn.selected { background: rgba(34,197,94,0.2); border-color: #22C55E; }
+.build-btn:active { transform: scale(0.95); }
+.build-btn .icon { font-size: clamp(18px, 4vw, 24px); }
+#msg { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 10px 20px; background: rgba(15,15,30,0.95); border: 2px solid rgba(252,211,77,0.5); border-radius: 10px; color: #FCD34D; font-size: clamp(13px, 3vw, 16px); font-weight: 600; backdrop-filter: blur(10px); pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity 0.3s; }
+#msg.show { opacity: 1; }
+#help { position: absolute; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; pointer-events: auto; backdrop-filter: blur(5px); z-index: 100; }
+#help.hidden { display: none; }
+#help-content { width: min(500px, 90vw); max-height: 80vh; background: rgba(10,10,25,0.98); border-radius: 16px; border: 2px solid rgba(100,120,180,0.4); padding: 20px; overflow-y: auto; color: white; }
+#help-content h1 { color: #FCD34D; text-align: center; margin-bottom: 15px; font-size: clamp(20px, 5vw, 28px); }
+#help-content .row { display: flex; gap: 12px; padding: 6px 0; font-size: clamp(12px, 3vw, 14px); }
+#help-content .key { color: #60A5FA; font-weight: 600; min-width: 120px; }
+#progress { position: absolute; top: 50px; left: 0; right: 0; height: 3px; background: rgba(20,20,40,0.9); }
+#progress-bar { height: 100%; background: #FCD34D; transition: width 0.1s; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="topbar">
+    <div class="phase" id="phase">☀️ Day 0</div>
+    <div class="res">🪵 <span id="wood">100</span></div>
+    <div class="res">🪨 <span id="stone">80</span></div>
+    <div class="res">🌾 <span id="food">60</span></div>
+    <div class="res">✨ <span id="essence">0</span></div>
+  </div>
+  <div id="progress"><div id="progress-bar" style="width:100%"></div></div>
+  <div id="buildbar"></div>
+  <div id="msg"></div>
+  <div id="help">
+    <div id="help-content">
+      <h1>🏝️ FUGO: ARCHIPELAGO</h1>
+      <p style="text-align:center;color:rgba(255,255,255,0.6);margin-bottom:15px">Build by day. Survive by night.</p>
+      <div class="row"><span class="key">👆 Drag</span><span>Pan camera</span></div>
+      <div class="row"><span class="key">🤏 Pinch</span><span>Zoom in/out</span></div>
+      <div class="row"><span class="key">👆 Tap island</span><span>Select island</span></div>
+      <div class="row"><span class="key">🏗️ Build menu</span><span>Tap building, then tap island</span></div>
+      <div style="height:1px;background:rgba(255,255,255,0.1);margin:12px 0"></div>
+      <div class="row"><span class="key" style="color:#FCD34D">☀️ DAY (60s)</span><span>Build & prepare</span></div>
+      <div class="row"><span class="key" style="color:#8B5CF6">🌙 NIGHT (40s+)</span><span>Defend from enemies</span></div>
+      <div class="row"><span class="key" style="color:#FB923C">🌅 DAWN</span><span>Collect rewards</span></div>
+      <button class="btn" style="width:100%;margin-top:20px" onclick="startGame()">▶️ START GAME</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game state
+let gameStarted = false;
+let time = 0;
+let phase = 'day'; // day, sunset, night, dawn
+let phaseTimer = 0;
+let nightNumber = 0;
+let res = { wood: 100, stone: 80, food: 60, essence: 0 };
+let buildings = [];
+let enemies = [];
+let particles = [];
+let selectedIsland = null;
+let placingBuilding = null;
+let shake = 0;
+let msg = '';
+let msgTimer = 0;
+
+// Camera
+let cam = { x: 1500, y: 1500, zoom: 0.6, targetX: 1500, targetY: 1500, targetZoom: 0.6 };
+
+// Islands
+const islands = [];
+function generateIslands() {
+  islands.length = 0;
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2 + Math.random() * 0.5;
+    const dist = 200 + Math.random() * 800;
+    const cx = 1500 + Math.cos(angle) * dist;
+    const cy = 1500 + Math.sin(angle) * dist;
+    const r = 60 + Math.random() * 80;
+    const points = [];
+    for (let j = 0; j < 24; j++) {
+      const a = (j / 24) * Math.PI * 2;
+      const noise = Math.sin(a * 3 + i) * 0.2 + Math.cos(a * 5) * 0.1;
+      points.push({ x: cx + Math.cos(a) * r * (1 + noise), y: cy + Math.sin(a) * r * (1 + noise) });
+    }
+    islands.push({ id: i, cx, cy, r, points, discovered: i === 0, trees: [] });
+    
+    // Add trees
+    for (let t = 0; t < 8; t++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * r * 0.7;
+      islands[i].trees.push({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d });
+    }
+  }
+}
+
+// Building types
+const BUILDINGS = [
+  { type: 'farm', icon: '🌾', name: 'Farm', wood: 15, stone: 8, hp: 60 },
+  { type: 'lumber', icon: '🪓', name: 'Lumber', wood: 10, stone: 12, hp: 70 },
+  { type: 'quarry', icon: '⛏️', name: 'Quarry', wood: 12, stone: 15, hp: 80 },
+  { type: 'wall', icon: '🧱', name: 'Wall', wood: 5, stone: 20, hp: 200 },
+  { type: 'tower', icon: '🗼', name: 'Tower', wood: 20, stone: 25, hp: 120 },
+];
+
+// Touch/mouse handling
+let touches = [];
+let lastTouchDist = 0;
+let lastTouchCenter = null;
+let mouseDown = false;
+let lastMouse = { x: 0, y: 0 };
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  touches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+  if (touches.length === 2) {
+    lastTouchDist = Math.hypot(touches[0].x - touches[1].x, touches[0].y - touches[1].y);
+    lastTouchCenter = { x: (touches[0].x + touches[1].x) / 2, y: (touches[0].y + touches[1].y) / 2 };
+  }
+});
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const newTouches = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+  
+  if (newTouches.length === 1 && touches.length === 1) {
+    const dx = newTouches[0].x - touches[0].x;
+    const dy = newTouches[0].y - touches[0].y;
+    cam.targetX -= dx / cam.zoom;
+    cam.targetY -= dy / cam.zoom;
+  }
+  
+  if (newTouches.length === 2) {
+    const dist = Math.hypot(newTouches[0].x - newTouches[1].x, newTouches[0].y - newTouches[1].y);
+    const center = { x: (newTouches[0].x + newTouches[1].x) / 2, y: (newTouches[0].y + newTouches[1].y) / 2 };
+    
+    if (lastTouchDist > 0) {
+      const scale = dist / lastTouchDist;
+      cam.targetZoom = Math.max(0.2, Math.min(3, cam.targetZoom * scale));
+    }
+    
+    if (lastTouchCenter) {
+      cam.targetX -= (center.x - lastTouchCenter.x) / cam.zoom;
+      cam.targetY -= (center.y - lastTouchCenter.y) / cam.zoom;
+    }
+    
+    lastTouchDist = dist;
+    lastTouchCenter = center;
+  }
+  
+  touches = newTouches;
+});
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (e.touches.length === 0 && touches.length === 1) {
+    // Single tap
+    handleClick(touches[0].x, touches[0].y);
+  }
+  touches = [];
+  lastTouchDist = 0;
+  lastTouchCenter = null;
+});
+
+canvas.addEventListener('mousedown', e => {
+  mouseDown = true;
+  lastMouse = { x: e.clientX, y: e.clientY };
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (mouseDown) {
+    const dx = e.clientX - lastMouse.x;
+    const dy = e.clientY - lastMouse.y;
+    cam.targetX -= dx / cam.zoom;
+    cam.targetY -= dy / cam.zoom;
+    lastMouse = { x: e.clientX, y: e.clientY };
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (mouseDown) {
+    const dx = Math.abs(e.clientX - lastMouse.x);
+    const dy = Math.abs(e.clientY - lastMouse.y);
+    if (dx < 5 && dy < 5) {
+      handleClick(e.clientX, e.clientY);
+    }
+  }
+  mouseDown = false;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.targetZoom = Math.max(0.2, Math.min(3, cam.targetZoom * (1 - e.deltaY * 0.001)));
+});
+
+function handleClick(sx, sy) {
+  if (!gameStarted) return;
+  
+  const wx = (sx - W / 2) / cam.zoom + cam.x;
+  const wy = (sy - H / 2) / cam.zoom + cam.y;
+  
+  // Place building
+  if (placingBuilding && selectedIsland !== null) {
+    const isl = islands[selectedIsland];
+    if (pointInPoly(wx, wy, isl.points)) {
+      const b = BUILDINGS[placingBuilding];
+      if (res.wood >= b.wood && res.stone >= b.stone) {
+        res.wood -= b.wood;
+        res.stone -= b.stone;
+        buildings.push({ type: b.type, x: wx, y: wy, hp: b.hp, maxHp: b.hp, islandId: selectedIsland });
+        showMsg(`${b.name} built!`);
+        placingBuilding = null;
+        updateBuildBar();
+      } else {
+        showMsg('Not enough resources!');
+      }
+    }
+    return;
+  }
+  
+  // Select island
+  for (let i = 0; i < islands.length; i++) {
+    if (pointInPoly(wx, wy, islands[i].points)) {
+      selectedIsland = i;
+      if (!islands[i].discovered) {
+        islands[i].discovered = true;
+        showMsg(`Discovered island #${i}!`);
+      }
+      return;
+    }
+  }
+  selectedIsland = null;
+}
+
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    if ((poly[i].y > y) !== (poly[j].y > y) && x < ((poly[j].x - poly[i].x) * (y - poly[i].y)) / (poly[j].y - poly[i].y) + poly[i].x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function showMsg(text) {
+  msg = text;
+  msgTimer = 3;
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.classList.add('show');
+}
+
+function updateBuildBar() {
+  const bar = document.getElementById('buildbar');
+  bar.innerHTML = '';
+  BUILDINGS.forEach((b, i) => {
+    const canAfford = res.wood >= b.wood && res.stone >= b.stone;
+    const div = document.createElement('div');
+    div.className = 'build-btn' + (placingBuilding === i ? ' selected' : '');
+    div.style.opacity = canAfford ? '1' : '0.4';
+    div.innerHTML = `<div class="icon">${b.icon}</div><div>${b.name}</div><div style="font-size:10px;color:rgba(255,255,255,0.5)">🪵${b.wood} 🪨${b.stone}</div>`;
+    div.onclick = () => {
+      if (!canAfford) { showMsg('Not enough resources!'); return; }
+      if (selectedIsland === null) { showMsg('Select an island first!'); return; }
+      placingBuilding = placingBuilding === i ? null : i;
+      updateBuildBar();
+    };
+    bar.appendChild(div);
+  });
+}
+
+function startGame() {
+  document.getElementById('help').classList.add('hidden');
+  gameStarted = true;
+  generateIslands();
+  buildings.push({ type: 'base', x: islands[0].cx, y: islands[0].cy, hp: 300, maxHp: 300, islandId: 0 });
+  cam.x = cam.targetX = islands[0].cx;
+  cam.y = cam.targetY = islands[0].cy;
+  updateBuildBar();
+  showMsg('Welcome! Build and survive.');
+}
+
+// Game loop
+function update(dt) {
+  if (!gameStarted) return;
+  
+  time += dt;
+  phaseTimer += dt;
+  
+  // Camera
+  cam.x += (cam.targetX - cam.x) * 0.1;
+  cam.y += (cam.targetY - cam.y) * 0.1;
+  cam.zoom += (cam.targetZoom - cam.zoom) * 0.1;
+  
+  // Shake
+  if (shake > 0) shake = Math.max(0, shake - dt * 5);
+  
+  // Message
+  if (msgTimer > 0) {
+    msgTimer -= dt;
+    if (msgTimer <= 0) {
+      document.getElementById('msg').classList.remove('show');
+    }
+  }
+  
+  // Phase logic
+  const phaseDuration = phase === 'day' ? 60 : phase === 'sunset' ? 8 : phase === 'night' ? 40 + nightNumber * 5 : 5;
+  
+  if (phaseTimer >= phaseDuration) {
+    phaseTimer = 0;
+    if (phase === 'day') {
+      phase = 'sunset';
+      showMsg('🌅 Sunset approaches...');
+    } else if (phase === 'sunset') {
+      phase = 'night';
+      nightNumber++;
+      showMsg(`🌙 NIGHT ${nightNumber}!`);
+      spawnEnemies();
+    } else if (phase === 'night') {
+      phase = 'dawn';
+      const essence = enemies.length;
+      res.essence += essence;
+      enemies = [];
+      showMsg(`🌅 Dawn! +${essence}✨`);
+    } else if (phase === 'dawn') {
+      phase = 'day';
+      showMsg('☀️ New day!');
+    }
+  }
+  
+  // Resource production (day)
+  if (phase === 'day') {
+    buildings.forEach(b => {
+      if (b.type === 'farm') res.food += 0.5 * dt;
+      if (b.type === 'lumber') res.wood += 0.8 * dt;
+      if (b.type === 'quarry') res.stone += 0.6 * dt;
+    });
+  }
+  
+  // Enemy logic (night)
+  if (phase === 'night') {
+    enemies.forEach(e => {
+      if (!e.alive) return;
+      
+      // Find nearest building
+      let nearest = null, minDist = Infinity;
+      buildings.forEach(b => {
+        if (b.hp <= 0) return;
+        const d = Math.hypot(b.x - e.x, b.y - e.y);
+        if (d < minDist) { minDist = d; nearest = b; }
+      });
+      
+      if (nearest) {
+        if (minDist < 20) {
+          // Attack
+          e.attackTimer += dt;
+          if (e.attackTimer >= 1) {
+            e.attackTimer = 0;
+            nearest.hp -= 5;
+            shake = 0.3;
+            addParticle(nearest.x, nearest.y, '#FF6432');
+          }
+        } else {
+          // Move
+          e.x += (nearest.x - e.x) / minDist * 30 * dt;
+          e.y += (nearest.y - e.y) / minDist * 30 * dt;
+        }
+      }
+    });
+    
+    // Tower attacks
+    buildings.forEach(b => {
+      if (b.type !== 'tower' || b.hp <= 0) return;
+      b.attackTimer = (b.attackTimer || 0) + dt;
+      if (b.attackTimer >= 1) {
+        b.attackTimer = 0;
+        let nearest = null, minDist = 150;
+        enemies.forEach(e => {
+          if (!e.alive) return;
+          const d = Math.hypot(e.x - b.x, e.y - b.y);
+          if (d < minDist) { minDist = d; nearest = e; }
+        });
+        if (nearest) {
+          nearest.hp -= 20;
+          if (nearest.hp <= 0) {
+            nearest.alive = false;
+            addParticle(nearest.x, nearest.y, '#C832FF');
+          }
+        }
+      }
+    });
+    
+    enemies = enemies.filter(e => e.alive);
+    buildings = buildings.filter(b => b.hp > 0);
+  }
+  
+  // Particles
+  particles.forEach(p => {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 100 * dt;
+    p.life -= dt;
+  });
+  particles = particles.filter(p => p.life > 0);
+  
+  // Update UI
+  document.getElementById('wood').textContent = Math.floor(res.wood);
+  document.getElementById('stone').textContent = Math.floor(res.stone);
+  document.getElementById('food').textContent = Math.floor(res.food);
+  document.getElementById('essence').textContent = Math.floor(res.essence);
+  
+  const phaseIcons = { day: '☀️', sunset: '🌅', night: '🌙', dawn: '🌄' };
+  document.getElementById('phase').textContent = `${phaseIcons[phase]} ${phase.charAt(0).toUpperCase() + phase.slice(1)} ${nightNumber}`;
+  document.getElementById('progress-bar').style.width = `${(1 - phaseTimer / phaseDuration) * 100}%`;
+}
+
+function spawnEnemies() {
+  const count = 3 + nightNumber * 2;
+  islands.forEach(isl => {
+    if (!isl.discovered) return;
+    if (!buildings.some(b => b.islandId === isl.id && b.hp > 0)) return;
+    
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = isl.r + 50 + Math.random() * 100;
+      enemies.push({
+        x: isl.cx + Math.cos(a) * d,
+        y: isl.cy + Math.sin(a) * d,
+        hp: 30 + nightNumber * 5,
+        alive: true,
+        attackTimer: 0,
+      });
+    }
+  });
+}
+
+function addParticle(x, y, color) {
+  for (let i = 0; i < 5; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 100,
+      vy: (Math.random() - 0.5) * 100 - 50,
+      life: 1,
+      color,
+      size: 3 + Math.random() * 3,
+    });
+  }
+}
+
+function render() {
+  // Sky
+  const dark = phase === 'night' ? 0.7 : phase === 'sunset' ? phaseTimer / 8 * 0.5 : phase === 'dawn' ? 0.5 * (1 - phaseTimer / 5) : 0;
+  ctx.fillStyle = `rgb(${30 - dark * 25}, ${80 - dark * 65}, ${140 - dark * 115})`;
+  ctx.fillRect(0, 0, W, H);
+  
+  // Camera transform
+  ctx.save();
+  const sx = shake > 0 ? Math.sin(time * 80) * shake * 8 : 0;
+  const sy = shake > 0 ? Math.cos(time * 80) * shake * 8 : 0;
+  ctx.translate(W / 2 + sx, H / 2 + sy);
+  ctx.scale(cam.zoom, cam.zoom);
+  ctx.translate(-cam.x, -cam.y);
+  
+  // Water waves
+  ctx.fillStyle = 'rgba(120, 180, 255, 0.1)';
+  for (let y = 0; y < 3000; y += 60) {
+    for (let x = 0; x < 3000; x += 60) {
+      const wave = Math.sin(x * 0.01 + time * 0.5) * Math.sin(y * 0.012 + time * 0.3);
+      if (wave > 0.3) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  
+  // Islands
+  islands.forEach(isl => {
+    if (!isl.discovered) {
+      ctx.fillStyle = 'rgba(15, 20, 30, 0.5)';
+    } else {
+      ctx.fillStyle = '#FFE0B2';
+    }
+    ctx.beginPath();
+    isl.points.forEach((p, i) => {
+      const dx = p.x - isl.cx, dy = p.y - isl.cy;
+      const px = isl.cx + dx * 1.1, py = isl.cy + dy * 1.1;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+    
+    if (isl.discovered) {
+      ctx.fillStyle = '#4CAF50';
+      ctx.beginPath();
+      isl.points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      
+      // Trees
+      isl.trees.forEach(t => {
+        ctx.fillStyle = '#5D4037';
+        ctx.fillRect(t.x - 1, t.y, 2, 6);
+        ctx.fillStyle = '#2E7D32';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y - 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      
+      // Selection
+      if (selectedIsland === isl.id) {
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 + Math.sin(time * 3) * 0.2})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        isl.points.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  });
+  
+  // Buildings
+  buildings.forEach(b => {
+    if (b.hp <= 0) return;
+    const icons = { base: '🏰', farm: '🌾', lumber: '🪓', quarry: '⛏️', wall: '🧱', tower: '🗼' };
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(icons[b.type] || '🏠', b.x, b.y + 8);
+    
+    // HP bar
+    if (b.hp < b.maxHp) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(b.x - 15, b.y - 20, 30, 4);
+      ctx.fillStyle = b.hp / b.maxHp > 0.5 ? '#4ADE80' : '#EF4444';
+      ctx.fillRect(b.x - 15, b.y - 20, 30 * (b.hp / b.maxHp), 4);
+    }
+  });
+  
+  // Enemies
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    ctx.fillStyle = '#B4C8DC';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    if (e.hp < 30 + nightNumber * 5) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(e.x - 10, e.y - 15, 20, 3);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(e.x - 10, e.y - 15, 20 * (e.hp / (30 + nightNumber * 5)), 3);
+    }
+  });
+  
+  // Particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+  
+  ctx.restore();
+  
+  // Darkness overlay
+  if (dark > 0) {
+    ctx.fillStyle = `rgba(0, 0, 15, ${dark})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+let lastTime = 0;
+function loop(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.1);
+  lastTime = ts;
+  
+  update(dt);
+  render();
+  
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
 </html>
